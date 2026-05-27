@@ -65,50 +65,46 @@ add_action( 'plugins_loaded', function () {
 
 // ============================================================
 // MODE DEBUG — retirer ce bloc une fois le problème résolu
-// Pour activer : définir REVAA_TTS_DEBUG à true ci-dessous.
 // ============================================================
-define( 'REVAA_TTS_DEBUG', true );
 
-if ( defined( 'REVAA_TTS_DEBUG' ) && REVAA_TTS_DEBUG ) {
+// PROBE 0 : le fichier est-il chargé par WordPress ?
+// Ce commentaire doit apparaître dans TOUTE page WordPress,
+// même la page d'accueil, même sans LifterLMS.
+// S'il est absent → le fichier n'est pas celui qui tourne sur le serveur.
+add_action( 'wp_head', function () {
+	echo "\n<!-- REVAA-TTS-PROBE: fichier chargé, PHP ok -->\n";
+}, 1 );
 
-	// ── Diagnostic 1 : LifterLMS détecté ? (via plugins_loaded) ──────────
-	add_action( 'plugins_loaded', function () {
-		$lifterlms_ok = class_exists( 'LifterLMS' ) ? 'OUI' : 'NON ← PROBLÈME';
-		error_log( '[REVAA TTS DEBUG] LifterLMS détecté : ' . $lifterlms_ok );
-	}, 99 ); // priorité 99 pour s'exécuter après notre propre init().
+// PROBE 1 : après plugins_loaded, état de LifterLMS
+add_action( 'plugins_loaded', function () {
+	$status = class_exists( 'LifterLMS' ) ? 'LifterLMS=OUI' : 'LifterLMS=NON';
+	// Écrit dans le log PHP (wp-content/debug.log si WP_DEBUG_LOG=true)
+	error_log( '[REVAA-TTS] plugins_loaded — ' . $status );
+}, 99 );
 
-	// ── Diagnostic 2 : post_type et is_singular en cours de page ─────────
-	add_action( 'wp_footer', function () {
-		$post_type    = get_post_type() ?: '(inconnu)';
-		$is_singular  = is_singular( 'llms_lesson' ) ? 'OUI' : 'NON';
-		$llms_class   = class_exists( 'LifterLMS' ) ? 'OUI' : 'NON';
-		$filter_added = has_filter( 'the_content', array( 'Revaa_TTS', 'inject_widget' ) )
-		                || ( has_filter( 'the_content' ) && false !== strpos( print_r( $GLOBALS['wp_filter']['the_content'] ?? [], true ), 'inject_widget' ) )
-		                ? 'OUI' : 'NON';
+// PROBE 2 : sur chaque page front, état complet dans wp_head
+add_action( 'wp_head', function () {
+	if ( is_admin() ) {
+		return;
+	}
+	$post_type   = get_post_type() ?: '(inconnu)';
+	$is_singular = is_singular( 'llms_lesson' ) ? 'OUI' : 'NON';
+	$llms        = class_exists( 'LifterLMS' ) ? 'OUI' : 'NON';
 
-		printf(
-			"\n<!-- REVAA TTS DEBUG\n"
-			. "  LifterLMS détecté  : %s\n"
-			. "  post_type courant  : %s\n"
-			. "  is_singular(llms_lesson) : %s\n"
-			. "  Filtre the_content branché : %s\n"
-			. "  Widget dans DOM   : %s\n"
-			. "-->\n",
-			esc_html( $llms_class ),
-			esc_html( $post_type ),
-			esc_html( $is_singular ),
-			esc_html( $filter_added ),
-			( is_singular( 'llms_lesson' ) && did_action( 'the_content' ) ) ? 'PEUT-ÊTRE (vérifier source HTML)' : 'NON'
-		);
-	} );
+	printf(
+		"\n<!-- REVAA-TTS-STATE: LifterLMS=%s | post_type=%s | is_singular(llms_lesson)=%s -->\n",
+		esc_html( $llms ),
+		esc_html( $post_type ),
+		esc_html( $is_singular )
+	);
+}, 2 );
 
-	// ── Diagnostic 3 : the_content est-il appelé sur une leçon ? ─────────
-	add_filter( 'the_content', function ( $content ) {
-		if ( is_singular( 'llms_lesson' ) ) {
-			$snippet = substr( wp_strip_all_tags( $content ), 0, 80 );
-			error_log( '[REVAA TTS DEBUG] the_content déclenché sur llms_lesson. Début : ' . $snippet );
-		}
-		return $content;
-	}, 999 ); // priorité haute pour s'exécuter après notre inject_widget.
-
-}
+// PROBE 3 : the_content passe-t-il sur une leçon ?
+add_filter( 'the_content', function ( $content ) {
+	if ( is_singular( 'llms_lesson' ) ) {
+		error_log( '[REVAA-TTS] the_content déclenché sur llms_lesson' );
+		// Injecte aussi un marqueur visible dans le HTML de la leçon
+		$content .= "\n<!-- REVAA-TTS-CONTENT: the_content a bien été appelé -->\n";
+	}
+	return $content;
+}, 999 );
