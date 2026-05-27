@@ -77,6 +77,13 @@ var progress=document.getElementById('revaa-tts-progress');
 
 /* ── Extraction du texte ── */
 function getText(){
+  // 1. Titre de la leçon — on tente plusieurs sélecteurs courants
+  var titleEl = document.querySelector(
+    '.llms-lesson-title, h1.entry-title, header h1, h1.page-title, h1'
+  );
+  var titleText = titleEl ? (titleEl.textContent||'').trim() : '';
+
+  // 2. Corps du contenu
   var selectors=['.entry-content','.llms-lesson-content','article .wp-block-post-content','main'];
   var container=null;
   for(var i=0;i<selectors.length;i++){container=document.querySelector(selectors[i]);if(container)break;}
@@ -88,9 +95,10 @@ function getText(){
    'style','script','noscript','iframe','svg'].forEach(function(s){
     clone.querySelectorAll(s).forEach(function(el){el.remove();});
   });
-  // innerText ignore les display:none mais peut échouer sur nœud détaché →
-  // on préfère textContent maintenant que style/script sont retirés.
-  return (clone.textContent||clone.innerText||'').replace(/\s+/g,' ').trim();
+  var bodyText = (clone.textContent||clone.innerText||'').replace(/\s+/g,' ').trim();
+
+  // 3. Concatène titre + contenu (séparés par une pause naturelle via ". ")
+  return titleText ? titleText + '. ' + bodyText : bodyText;
 }
 
 /* ── Voix ── */
