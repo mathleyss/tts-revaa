@@ -1,41 +1,60 @@
 /**
  * Revaa TTS — Widget Styles
  *
- * Styles for the #revaa-tts-widget injected into LifterLMS lesson pages.
+ * Feuille de style du lecteur TTS injecté dans les leçons LifterLMS.
+ * Chargée uniquement sur les pages de type `llms_lesson` via wp_enqueue_style
+ * (voir includes/class-revaa-tts.php → enqueue_assets()).
+ *
+ * Organisation :
+ *  1. Conteneur principal  #revaa-tts-widget
+ *  2. Boutons              button
+ *  3. Labels               label
+ *  4. Sélecteurs           select
+ *  5. Barre de progression progress
+ *  6. Notice navigateur    .revaa-tts-unsupported
+ *  7. Responsive mobile    @media ≤ 600 px
  *
  * @package Revaa_TTS
  */
 
 /* =========================================================================
-   Widget container
+   1. Conteneur principal
+   =========================================================================
+   Flex row avec retour à la ligne automatique (flex-wrap: wrap) pour
+   s'adapter aux petits écrans sans media-query supplémentaire.
+   La bordure gauche bleue (#2271b1 = couleur admin WordPress) identifie
+   visuellement le widget comme un outil de lecture, pas du contenu.
    ========================================================================= */
 #revaa-tts-widget {
 	display:         flex;
 	align-items:     center;
-	gap:             12px;
-	flex-wrap:       wrap;
+	gap:             12px;      /* Espacement uniforme entre les enfants. */
+	flex-wrap:       wrap;      /* Retour à la ligne si espace insuffisant. */
 
-	background:      #f5f5f5;
-	border-left:     4px solid #2271b1;
+	background:      #f5f5f5;  /* Fond légèrement grisé, discret. */
+	border-left:     4px solid #2271b1; /* Indicateur coloré WordPress. */
 	border-radius:   4px;
 	padding:         10px 16px;
-	margin:          16px 0;
+	margin:          16px 0;   /* Séparation verticale avec le contenu voisin. */
 
-	font-family:     inherit;
+	font-family:     inherit;  /* Hérite de la police du thème. */
 	font-size:       0.9rem;
 	color:           #333;
 	box-sizing:      border-box;
 }
 
 /* =========================================================================
-   Buttons
+   2. Boutons Play/Pause et Stop
+   =========================================================================
+   Style sobre et accessible : fond bleu, texte blanc, focus visible.
+   La transition donne un retour visuel immédiat au clic.
    ========================================================================= */
 #revaa-tts-widget button {
 	display:          inline-flex;
 	align-items:      center;
-	gap:              6px;
+	gap:              6px;         /* Espace entre icône et libellé. */
 
-	background:       #2271b1;
+	background:       #2271b1;     /* Bleu WordPress Admin. */
 	color:            #fff;
 	border:           none;
 	border-radius:    4px;
@@ -44,25 +63,27 @@
 	font-weight:      600;
 	cursor:           pointer;
 	transition:       background 0.15s ease, transform 0.1s ease;
-	white-space:      nowrap;
+	white-space:      nowrap;      /* Évite le saut de ligne dans le bouton. */
 }
 
+/* État hover et focus (accessibilité clavier). */
 #revaa-tts-widget button:hover,
 #revaa-tts-widget button:focus-visible {
-	background:       #135e96;
+	background:       #135e96;     /* Bleu plus foncé au survol. */
 	outline:          2px solid #135e96;
 	outline-offset:   2px;
 }
 
+/* Retour haptique visuel au clic. */
 #revaa-tts-widget button:active {
 	transform:        scale(0.96);
 }
 
-/* Stop button — lighter style */
+/* Bouton Stop — style gris pour le distinguer du Play/Pause. */
 #revaa-tts-stop {
-	background:       #757575 !important;
+	background:       #757575 !important; /* Gris neutre. */
 	padding:          6px 10px !important;
-	font-size:        1rem !important;
+	font-size:        1rem !important;    /* Icône ⏹ légèrement plus grande. */
 }
 
 #revaa-tts-stop:hover,
@@ -71,7 +92,9 @@
 }
 
 /* =========================================================================
-   Labels
+   3. Labels
+   =========================================================================
+   Petits libellés discrets associés aux <select> (Vitesse, Voix).
    ========================================================================= */
 #revaa-tts-widget label {
 	font-size:   0.8rem;
@@ -81,16 +104,24 @@
 }
 
 /* =========================================================================
-   Select dropdowns
+   4. Sélecteurs (vitesse et voix)
+   =========================================================================
+   Le `<select>` natif est réinitialisé via `appearance: none` pour un
+   rendu cohérent cross-browser, puis customisé avec un chevron SVG
+   encodé en base64 inline (évite une requête réseau supplémentaire).
    ========================================================================= */
 #revaa-tts-widget select {
-	appearance:       none;
+	/* Supprime le style natif du navigateur. */
+	appearance:         none;
 	-webkit-appearance: none;
+
+	/* Fond blanc + chevron SVG inline à droite. */
 	background:       #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23555'/%3E%3C/svg%3E") no-repeat right 8px center;
 	background-size:  10px 6px;
+
 	border:           1px solid #c5c5c5;
 	border-radius:    4px;
-	padding:          5px 28px 5px 10px;
+	padding:          5px 28px 5px 10px; /* Espace à droite pour le chevron. */
 	font-size:        0.85rem;
 	color:            #333;
 	cursor:           pointer;
@@ -105,66 +136,82 @@
 	outline-offset:   1px;
 }
 
+/* La liste des voix peut être longue, on lui donne une largeur max raisonnable. */
 #revaa-tts-voice {
 	max-width:  220px;
 }
 
 /* =========================================================================
-   Progress bar
+   5. Barre de progression
+   =========================================================================
+   L'élément <progress> est normalisé cross-browser avec appearance: none.
+   Les pseudo-éléments ::webkit-progress-* et ::-moz-progress-bar
+   permettent de styler la partie remplie dans chaque moteur de rendu.
+   La transition CSS sur `width` produit une animation fluide.
    ========================================================================= */
 #revaa-tts-progress {
-	flex:             1 1 200px;
+	flex:             1 1 200px; /* Croît et rétrécit, base 200 px. */
 	max-width:        200px;
 	height:           6px;
 	border-radius:    3px;
 	overflow:         hidden;
 	border:           none;
-	background:       #ddd;
+	background:       #ddd;      /* Fond de la barre (partie non remplie). */
 	appearance:       none;
 	-webkit-appearance: none;
 }
 
-/* WebKit / Blink (Chrome, Safari, Edge) */
+/* WebKit / Blink (Chrome, Safari, Edge) — fond de piste. */
 #revaa-tts-progress::-webkit-progress-bar {
-	background:   #ddd;
+	background:    #ddd;
 	border-radius: 3px;
 }
 
+/* WebKit / Blink — partie remplie. */
 #revaa-tts-progress::-webkit-progress-value {
-	background:    #2271b1;
+	background:    #2271b1;      /* Bleu WordPress. */
 	border-radius: 3px;
-	transition:    width 0.3s ease;
+	transition:    width 0.3s ease; /* Animation fluide de la progression. */
 }
 
-/* Firefox */
+/* Firefox — partie remplie. */
 #revaa-tts-progress::-moz-progress-bar {
 	background:    #2271b1;
 	border-radius: 3px;
 }
 
 /* =========================================================================
-   Unsupported browser notice
+   6. Notice navigateur non supporté
+   =========================================================================
+   Affichée à la place du widget quand speechSynthesis est absent.
+   Style "warning" : fond jaune pâle, bordure ambre.
    ========================================================================= */
 .revaa-tts-unsupported {
-	background:   #fff3cd;
-	border-left:  4px solid #ffc107;
+	background:    #fff3cd;     /* Jaune pâle "warning". */
+	border-left:   4px solid #ffc107; /* Ambre. */
 	border-radius: 4px;
-	padding:      10px 16px;
-	margin:       16px 0;
-	font-size:    0.875rem;
-	color:        #856404;
+	padding:       10px 16px;
+	margin:        16px 0;
+	font-size:     0.875rem;
+	color:         #856404;     /* Texte brun-doré lisible sur fond jaune. */
 }
 
 /* =========================================================================
-   Responsive — mobile: stack everything vertically
+   7. Responsive — mobile (≤ 600 px)
+   =========================================================================
+   Sur mobile, on passe de la disposition en ligne (flex row) à une
+   disposition en colonne (flex column) pour que chaque contrôle prenne
+   toute la largeur disponible et soit facile à toucher.
    ========================================================================= */
 @media ( max-width: 600px ) {
+
 	#revaa-tts-widget {
-		flex-direction: column;
-		align-items:    flex-start;
+		flex-direction: column;     /* Empilement vertical. */
+		align-items:    flex-start; /* Alignement à gauche. */
 		gap:            10px;
 	}
 
+	/* Boutons et sélecteurs en pleine largeur pour faciliter le toucher. */
 	#revaa-tts-widget button,
 	#revaa-tts-widget select {
 		width:      100%;
@@ -172,12 +219,13 @@
 	}
 
 	#revaa-tts-voice {
-		max-width: 100%;
+		max-width: 100%; /* Annule la limite de 220 px sur mobile. */
 	}
 
+	/* La barre de progression occupe toute la largeur. */
 	#revaa-tts-progress {
 		width:     100%;
 		max-width: 100%;
-		flex:      0 0 auto;
+		flex:      0 0 auto; /* Ne pas laisser le flex modifier la hauteur. */
 	}
 }

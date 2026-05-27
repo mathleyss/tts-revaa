@@ -1,9 +1,15 @@
 /**
  * Revaa TTS — Web Speech API player
  *
- * Vanilla JS — no jQuery dependency.
- * Attaches play/pause/stop controls, voice selector and speed selector
- * to the #revaa-tts-widget injected by the PHP class.
+ * Ce script est enqueué uniquement sur les pages de leçon LifterLMS
+ * (voir includes/class-revaa-tts.php → enqueue_assets()).
+ *
+ * Il s'appuie exclusivement sur l'API Web Speech native du navigateur :
+ *   - window.speechSynthesis    : interface principale de synthèse vocale.
+ *   - SpeechSynthesisUtterance  : représente un énoncé à lire.
+ *
+ * Aucune dépendance externe (pas de jQuery, pas de bibliothèque tierce).
+ * Compatible WordPress 6.0+, navigateurs modernes (voir README).
  *
  * @package Revaa_TTS
  */
@@ -12,65 +18,82 @@
 	'use strict';
 
 	/* ------------------------------------------------------------------ */
-	/* 0. Wait for DOM ready                                                */
+	/* 0. Attendre que le DOM soit entièrement chargé                      */
+	/*    On utilise DOMContentLoaded plutôt que window.load pour démarrer */
+	/*    dès que le HTML est parsé, sans attendre images et CSS.          */
 	/* ------------------------------------------------------------------ */
 	document.addEventListener( 'DOMContentLoaded', function () {
+
+		// Récupère le conteneur du widget injecté par le PHP.
 		const widget = document.getElementById( 'revaa-tts-widget' );
 
-		// Nothing to do if the widget is not on this page.
+		// Si le widget n'existe pas sur cette page, on ne fait rien.
 		if ( ! widget ) {
 			return;
 		}
 
 		/* ---------------------------------------------------------------- */
-		/* 1. Check browser support                                          */
+		/* 1. Vérification du support navigateur                            */
+		/*    L'API Web Speech n'est pas disponible dans tous les           */
+		/*    navigateurs (ex. : Opera Mini, certains navigateurs mobiles   */
+		/*    rares). On vérifie sa présence avant toute opération.         */
 		/* ---------------------------------------------------------------- */
 		if ( ! ( 'speechSynthesis' in window ) ) {
+			// Masquer le widget pour ne pas afficher des boutons non fonctionnels.
 			widget.style.display = 'none';
 
-			const msg = document.createElement( 'p' );
-			msg.className = 'revaa-tts-unsupported';
-			msg.innerHTML =
+			// Afficher un message explicite invitant à changer de navigateur.
+			const msg       = document.createElement( 'p' );
+			msg.className   = 'revaa-tts-unsupported';
+			msg.innerHTML   =
 				'🔇 <strong>Lecteur audio non supporté par ce navigateur.</strong><br>' +
 				'Pour profiter de la lecture vocale, veuillez utiliser un navigateur moderne compatible : ' +
 				'<strong>Google Chrome</strong>, <strong>Microsoft Edge</strong>, ' +
 				'<strong>Safari</strong> (macOS / iOS) ou <strong>Firefox</strong>.';
+
+			// Insérer le message avant le widget dans le DOM.
 			widget.parentNode.insertBefore( msg, widget );
 			return;
 		}
 
 		/* ---------------------------------------------------------------- */
-		/* 2. Grab UI elements                                               */
+		/* 2. Références aux éléments DOM du widget                         */
 		/* ---------------------------------------------------------------- */
-		const synth       = window.speechSynthesis;
+		const synth       = window.speechSynthesis; // Interface SpeechSynthesis.
 		const btnPlay     = document.getElementById( 'revaa-tts-play' );
 		const btnStop     = document.getElementById( 'revaa-tts-stop' );
 		const selSpeed    = document.getElementById( 'revaa-tts-speed' );
 		const selVoice    = document.getElementById( 'revaa-tts-voice' );
 		const progressBar = document.getElementById( 'revaa-tts-progress' );
 
-		// Translated strings passed from PHP via wp_localize_script.
+		// Libellés traduits passés depuis PHP via wp_localize_script.
+		// Fallback en français si l'objet n'existe pas (dev / test hors WP).
 		const strings = ( typeof revaa_tts_strings !== 'undefined' )
 			? revaa_tts_strings
 			: { play: 'Lire', pause: 'Pause', stop: 'Arrêter', speed: 'Vitesse', voice: 'Voix' };
 
 		/* ---------------------------------------------------------------- */
-		/* 3. Extract readable text from the lesson content                  */
+		/* 3. Extraction du texte de la leçon                               */
+		/*                                                                   */
+		/*    On cherche le conteneur principal du contenu pédagogique en   */
+		/*    testant plusieurs sélecteurs dans l'ordre de priorité.        */
+		/*    Ensuite, on clone le nœud pour supprimer les éléments         */
+		/*    indésirables (navigation, widget TTS lui-même…) sans altérer  */
+		/*    le DOM visible de la page.                                     */
 		/* ---------------------------------------------------------------- */
 
 		/**
-		 * Return the text content of the lesson, excluding navigation
-		 * and the TTS widget itself.
+		 * Extrait et retourne le texte lisible de la leçon.
 		 *
-		 * @returns {string}
+		 * @returns {string} Texte brut à synthétiser.
 		 */
 		function extractLessonText() {
-			// Selectors to try, in priority order.
+			// Sélecteurs testés dans l'ordre de priorité.
 			const candidates = [
-				'.entry-content',
-				'.llms-lesson-content',
-				'article .wp-block-post-content',
-				'main',
+				'.entry-content',                   // Thème classique WordPress.
+				'.llms-lesson-content',             // Conteneur spécifique LifterLMS.
+				'article .wp-block-post-content',   // Éditeur de blocs (FSE).
+				'main',                             // Fallback générique.
 			];
 
 			let container = null;
@@ -81,21 +104,21 @@
 				}
 			}
 
+			// Dernier recours : utiliser tout le body.
 			if ( ! container ) {
 				return document.body.innerText;
 			}
 
-			// Clone the container so we can remove unwanted nodes without
-			// altering the visible DOM.
+			// Clone profond : on peut supprimer des nœuds sans toucher au DOM réel.
 			const clone = container.cloneNode( true );
 
-			// Remove elements that should not be read aloud.
+			// Éléments à exclure de la lecture (navigation, chrome du site, widget).
 			const excludeSelectors = [
-				'#revaa-tts-widget',
-				'nav',
-				'header',
-				'footer',
-				'.llms-course-navigation',
+				'#revaa-tts-widget',        // Le widget lui-même.
+				'nav',                      // Menus de navigation.
+				'header',                   // En-têtes.
+				'footer',                   // Pieds de page.
+				'.llms-course-navigation',  // Navigation LifterLMS leçon suivante/précédente.
 			];
 			excludeSelectors.forEach( function ( sel ) {
 				clone.querySelectorAll( sel ).forEach( function ( el ) {
@@ -103,26 +126,34 @@
 				} );
 			} );
 
+			// innerText respecte le rendu CSS (ignore display:none).
+			// On revient sur textContent si innerText n'est pas disponible.
 			return clone.innerText || clone.textContent || '';
 		}
 
 		/* ---------------------------------------------------------------- */
-		/* 4. Voice list                                                     */
+		/* 4. Gestion de la liste des voix                                  */
+		/*                                                                   */
+		/*    speechSynthesis.getVoices() retourne un tableau de            */
+		/*    SpeechSynthesisVoice. Dans Chrome, ce tableau est vide au     */
+		/*    premier appel synchrone : il faut écouter l'événement         */
+		/*    `voiceschanged` pour être notifié du chargement asynchrone.   */
 		/* ---------------------------------------------------------------- */
 
 		/**
-		 * Populate the <select id="revaa-tts-voice"> with available voices.
-		 * French voices are listed first, others in a separate optgroup.
+		 * Peuple le <select> des voix.
+		 * Les voix françaises apparaissent en premier dans leur propre optgroup.
+		 * Les autres voix sont groupées séparément.
 		 */
 		function populateVoices() {
 			const voices = synth.getVoices();
 
-			// Clear existing options.
+			// Vider les options existantes avant de re-peupler.
 			selVoice.innerHTML = '';
 
 			if ( voices.length === 0 ) {
-				// Rare edge case: no voices available at all.
-				const opt = document.createElement( 'option' );
+				// Cas rare : aucune voix disponible sur ce système/navigateur.
+				const opt       = document.createElement( 'option' );
 				opt.textContent = 'Aucune voix disponible';
 				opt.disabled    = true;
 				selVoice.appendChild( opt );
@@ -132,10 +163,11 @@
 
 			selVoice.disabled = false;
 
+			// Sépare les voix françaises des autres.
 			const frVoices    = voices.filter( v => v.lang.startsWith( 'fr' ) );
 			const otherVoices = voices.filter( v => ! v.lang.startsWith( 'fr' ) );
 
-			// French voices (no optgroup label needed, shown first).
+			// Groupe des voix françaises (affiché en premier).
 			if ( frVoices.length > 0 ) {
 				const grpFr = document.createElement( 'optgroup' );
 				grpFr.label = '🇫🇷 Voix françaises';
@@ -145,7 +177,7 @@
 				selVoice.appendChild( grpFr );
 			}
 
-			// Other languages.
+			// Groupe des autres langues.
 			if ( otherVoices.length > 0 ) {
 				const grpOther = document.createElement( 'optgroup' );
 				grpOther.label = '🌐 Autres voix';
@@ -157,49 +189,58 @@
 		}
 
 		/**
-		 * Create an <option> element for a SpeechSynthesisVoice.
+		 * Crée un élément <option> pour une SpeechSynthesisVoice.
 		 *
-		 * @param   {SpeechSynthesisVoice} voice
+		 * @param   {SpeechSynthesisVoice} voice  La voix à représenter.
 		 * @returns {HTMLOptionElement}
 		 */
 		function makeVoiceOption( voice ) {
-			const opt   = document.createElement( 'option' );
-			opt.value   = voice.name;
+			const opt       = document.createElement( 'option' );
+			opt.value       = voice.name; // La `value` sert à retrouver la voix plus tard.
 			opt.textContent = voice.name + ' (' + voice.lang + ')';
 			return opt;
 		}
 
-		// Voices may load asynchronously (especially in Chrome).
+		// Premier appel synchrone (peut être vide dans Chrome).
 		populateVoices();
+
+		// Écouter le chargement asynchrone des voix (surtout Chrome).
 		if ( synth.onvoiceschanged !== undefined ) {
 			synth.onvoiceschanged = populateVoices;
 		}
 
 		/* ---------------------------------------------------------------- */
-		/* 5. Player state                                                   */
+		/* 5. État interne du lecteur                                        */
 		/* ---------------------------------------------------------------- */
-		let utterance   = null;
-		let isPaused    = false;
-		let charIndex   = 0;      // tracks boundary position for progress
-		let totalLength = 0;      // total text length for progress %
-		let keepAlive   = null;   // Chrome keep-alive interval ID
+		let utterance   = null;  // SpeechSynthesisUtterance en cours.
+		let isPaused    = false; // true si la lecture est en pause.
+		let charIndex   = 0;     // Index de caractère courant (événement boundary).
+		let totalLength = 0;     // Longueur totale du texte (pour le % de progression).
+		let keepAlive   = null;  // ID du setInterval du workaround Chrome.
 
 		/* ---------------------------------------------------------------- */
-		/* 6. Chrome keep-alive workaround                                  */
+		/* 6. Workaround Chrome — keep-alive                                */
 		/*                                                                   */
-		/* Chrome silently cancels synthesis after ~15 s on long texts.     */
-		/* Pausing and immediately resuming every 10 s resets the timer.    */
+		/*    Chrome annule silencieusement la synthèse après ~15 s sur     */
+		/*    les textes longs. La solution consiste à appeler               */
+		/*    speechSynthesis.pause() puis .resume() toutes les 10 s pour   */
+		/*    réinitialiser le timer interne du navigateur sans interruption */
+		/*    perceptible pour l'utilisateur.                                */
 		/* ---------------------------------------------------------------- */
+
+		/** Démarre (ou redémarre) l'intervalle keep-alive. */
 		function startKeepAlive() {
-			stopKeepAlive();
+			stopKeepAlive(); // Toujours nettoyer avant d'en créer un nouveau.
 			keepAlive = setInterval( function () {
+				// N'agit que si la synthèse est en cours et non en pause manuelle.
 				if ( synth.speaking && ! isPaused ) {
 					synth.pause();
 					synth.resume();
 				}
-			}, 10000 );
+			}, 10000 ); // Toutes les 10 secondes.
 		}
 
+		/** Arrête l'intervalle keep-alive et libère la référence. */
 		function stopKeepAlive() {
 			if ( keepAlive !== null ) {
 				clearInterval( keepAlive );
@@ -208,45 +249,63 @@
 		}
 
 		/* ---------------------------------------------------------------- */
-		/* 7. Reset UI to "Play" state                                      */
+		/* 7. Remise à zéro de l'interface                                  */
+		/*    Appelée à la fin naturelle de la lecture ET lors d'un Stop.   */
 		/* ---------------------------------------------------------------- */
+
+		/** Remet le bouton Play et la barre de progression dans leur état initial. */
 		function resetPlayer() {
-			isPaused       = false;
-			charIndex      = 0;
-			btnPlay.innerHTML = '&#9654; ' + strings.play;
+			isPaused              = false;
+			charIndex             = 0;
+			// Icône ▶ + libellé traduit.
+			btnPlay.innerHTML     = '&#9654; ' + strings.play;
 			btnPlay.setAttribute( 'aria-label', strings.play );
-			progressBar.value = 0;
+			progressBar.value     = 0;
 			stopKeepAlive();
 		}
 
 		/* ---------------------------------------------------------------- */
-		/* 8. Build and speak an utterance                                  */
+		/* 8. Démarrage de la synthèse                                      */
 		/* ---------------------------------------------------------------- */
+
+		/**
+		 * Crée un SpeechSynthesisUtterance, configure la voix et la vitesse
+		 * choisies, branche les événements, puis appelle synth.speak().
+		 *
+		 * @param {string} text  Texte à lire.
+		 */
 		function startSpeaking( text ) {
-			synth.cancel(); // cancel any previous utterance
+			synth.cancel(); // Stoppe toute lecture précédente (sécurité).
 
-			utterance       = new SpeechSynthesisUtterance( text );
-			totalLength     = text.length;
-			charIndex       = 0;
+			utterance   = new SpeechSynthesisUtterance( text );
+			totalLength = text.length;
+			charIndex   = 0;
 
-			// Apply selected speed.
-			utterance.rate  = parseFloat( selSpeed.value ) || 1;
+			// Applique la vitesse sélectionnée dans le <select>.
+			utterance.rate = parseFloat( selSpeed.value ) || 1;
 
-			// Apply selected voice.
+			// Cherche la voix correspondant au nom sélectionné dans le <select>.
 			const voices    = synth.getVoices();
 			const voiceName = selVoice.value;
 			const chosen    = voices.find( v => v.name === voiceName );
+
 			if ( chosen ) {
+				// Voix explicitement choisie par l'utilisateur.
 				utterance.voice = chosen;
 				utterance.lang  = chosen.lang;
 			} else if ( voices.length > 0 ) {
-				// Default to first French voice, or first available.
-				const fallback = voices.find( v => v.lang.startsWith( 'fr' ) ) || voices[ 0 ];
+				// Aucune voix sélectionnée : on prend la première voix française,
+				// ou la première voix disponible si aucune voix française n'existe.
+				const fallback  = voices.find( v => v.lang.startsWith( 'fr' ) ) || voices[ 0 ];
 				utterance.voice = fallback;
 				utterance.lang  = fallback.lang;
 			}
+			// Si voices.length === 0, l'API utilisera la voix système par défaut.
 
-			/* Boundary event — update progress bar */
+			/* -- Événement boundary : mis à jour à chaque mot / phrase ---
+			 * `e.charIndex` indique la position dans le texte.
+			 * On calcule un pourcentage pour la barre de progression.
+			 */
 			utterance.addEventListener( 'boundary', function ( e ) {
 				if ( e.name === 'word' || e.name === 'sentence' ) {
 					charIndex = e.charIndex;
@@ -256,54 +315,70 @@
 				}
 			} );
 
-			/* End of speech */
+			/* -- Fin naturelle de la lecture ----------------------------- */
 			utterance.addEventListener( 'end', function () {
 				resetPlayer();
 			} );
 
-			/* Error handler */
+			/* -- Erreur de synthèse -------------------------------------- */
 			utterance.addEventListener( 'error', function ( e ) {
-				// 'interrupted' fires on manual cancel — not a real error.
+				// L'erreur 'interrupted' se déclenche lors d'un cancel manuel :
+				// ce n'est pas une vraie erreur, on l'ignore silencieusement.
 				if ( e.error !== 'interrupted' ) {
-					console.warn( 'Revaa TTS error:', e.error );
+					console.warn( 'Revaa TTS — erreur synthèse vocale :', e.error );
 				}
 				resetPlayer();
 			} );
 
+			// Lance la synthèse vocale.
 			synth.speak( utterance );
+
+			// Démarre le keep-alive pour contourner le bug Chrome.
 			startKeepAlive();
 		}
 
 		/* ---------------------------------------------------------------- */
-		/* 9. Play / Pause button handler                                   */
+		/* 9. Bouton Play / Pause                                           */
+		/*                                                                   */
+		/*    Ce bouton joue un triple rôle selon l'état courant :          */
+		/*    - Inactif  → démarre la lecture.                              */
+		/*    - En cours → met en pause.                                    */
+		/*    - En pause → reprend la lecture.                              */
 		/* ---------------------------------------------------------------- */
 		btnPlay.addEventListener( 'click', function () {
+
 			if ( synth.speaking ) {
 				if ( isPaused ) {
-					// Resume from pause.
+					/* ---- Reprise après pause ---- */
 					synth.resume();
 					isPaused = false;
+					// Icône ⏸ + libellé "Pause".
 					btnPlay.innerHTML = '&#9646;&#9646; ' + strings.pause;
 					btnPlay.setAttribute( 'aria-label', strings.pause );
-					startKeepAlive();
+					startKeepAlive(); // Reprend le keep-alive suspendu.
+
 				} else {
-					// Pause active speech.
+					/* ---- Mise en pause ---- */
 					synth.pause();
 					isPaused = true;
-					stopKeepAlive();
+					stopKeepAlive(); // Inutile de tourner pendant la pause.
+					// Retour à l'icône ▶ + libellé "Lire".
 					btnPlay.innerHTML = '&#9654; ' + strings.play;
 					btnPlay.setAttribute( 'aria-label', strings.play );
 				}
+
 			} else {
-				// Start fresh.
+				/* ---- Démarrage d'une nouvelle lecture ---- */
 				const text = extractLessonText().trim();
 
 				if ( ! text ) {
-					console.warn( 'Revaa TTS: no text found to read.' );
+					// Aucun texte trouvé : ne rien faire (cas dégradé très rare).
+					console.warn( 'Revaa TTS : aucun texte trouvé dans la leçon.' );
 					return;
 				}
 
 				isPaused = false;
+				// Icône ⏸ + libellé "Pause" (on passe immédiatement en état "lecture").
 				btnPlay.innerHTML = '&#9646;&#9646; ' + strings.pause;
 				btnPlay.setAttribute( 'aria-label', strings.pause );
 				startSpeaking( text );
@@ -311,27 +386,33 @@
 		} );
 
 		/* ---------------------------------------------------------------- */
-		/* 10. Stop button handler                                          */
+		/* 10. Bouton Stop                                                   */
+		/*     Annule la synthèse en cours et remet tout à zéro.            */
 		/* ---------------------------------------------------------------- */
 		btnStop.addEventListener( 'click', function () {
-			synth.cancel();
+			synth.cancel(); // Interrompt la synthèse (déclenche l'événement 'error' avec e.error = 'interrupted').
 			resetPlayer();
 		} );
 
 		/* ---------------------------------------------------------------- */
-		/* 11. Speed change — restart with new rate if already speaking     */
+		/* 11. Changement de vitesse en cours de lecture                    */
+		/*                                                                   */
+		/*     La vitesse (utterance.rate) ne peut pas être modifiée sur    */
+		/*     un SpeechSynthesisUtterance déjà en cours. Pour l'appliquer  */
+		/*     immédiatement, on annule la lecture en cours et on redémarre  */
+		/*     depuis la position approximative actuelle (charIndex).        */
 		/* ---------------------------------------------------------------- */
 		selSpeed.addEventListener( 'change', function () {
 			if ( synth.speaking ) {
-				// Remember position to restart from current charIndex.
-				const text  = extractLessonText().trim();
-				const remaining = text.slice( charIndex );
+				// Récupère le texte complet et reprend à partir du dernier charIndex.
+				const text      = extractLessonText().trim();
+				const remaining = text.slice( charIndex ); // Portion non encore lue.
 				synth.cancel();
 				isPaused = false;
 				startSpeaking( remaining );
 			}
 		} );
 
-	} );
+	} ); // fin DOMContentLoaded
 
-} )();
+} )(); // fin IIFE
