@@ -80,12 +80,17 @@ function getText(){
   var selectors=['.entry-content','.llms-lesson-content','article .wp-block-post-content','main'];
   var container=null;
   for(var i=0;i<selectors.length;i++){container=document.querySelector(selectors[i]);if(container)break;}
-  if(!container)return document.body.innerText||'';
+  if(!container)container=document.body;
   var clone=container.cloneNode(true);
-  ['#revaa-tts-widget','nav','header','footer','.llms-course-navigation'].forEach(function(s){
+  // Supprime les éléments à exclure ET les balises style/script
+  // (textContent les lirait sinon si innerText échoue sur nœud détaché)
+  ['#revaa-tts-widget','nav','header','footer','.llms-course-navigation',
+   'style','script','noscript','iframe','svg'].forEach(function(s){
     clone.querySelectorAll(s).forEach(function(el){el.remove();});
   });
-  return clone.innerText||clone.textContent||'';
+  // innerText ignore les display:none mais peut échouer sur nœud détaché →
+  // on préfère textContent maintenant que style/script sont retirés.
+  return (clone.textContent||clone.innerText||'').replace(/\s+/g,' ').trim();
 }
 
 /* ── Voix ── */
