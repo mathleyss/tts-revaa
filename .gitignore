@@ -1,0 +1,38 @@
+# Dépendances
+node_modules/
+vendor/
+
+# Environnement
+.env
+.env.local
+.env.*.local
+
+# IDE & éditeurs
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+
+# Agents IA & outils d'automatisation
+.claude/
+.cursor/
+.aider*
+*_AGENT.md
+*_AGENT/
+AGENT_*
+README_AGENT*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build local
+dist/
+tmp/
