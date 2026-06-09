@@ -126,7 +126,7 @@ function getText(){
 
 /* ── Liste des voix (françaises uniquement) ── */
 function populateVoices(){
-  var voices=synth.getVoices().filter(function(v){return v.lang.startsWith('fr');});
+  var voices=synth.getVoices().filter(function(v){var l=(v.lang||'').toLowerCase();return l==='fr'||l.indexOf('fr-')===0||l.indexOf('fr_')===0;});
   selVoice.innerHTML='';
   if(!voices.length){
     var o=document.createElement('option');o.textContent='Aucune voix française disponible';o.disabled=true;
