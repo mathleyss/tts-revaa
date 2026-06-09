@@ -3,7 +3,7 @@
  * Plugin Name: Revaa TTS
  * Plugin URI:  https://mathieu.leyssene.fr
  * Description: Lecteur text-to-speech personnalisé pour la plateforme de formation REVAA
- * Version:     1.0.0
+ * Version:     1.2.0
  * Author:      Mathieu Leyssene
  * Author URI:  https://mathieu.leyssene.fr
  * Text Domain: revaa-tts
@@ -34,7 +34,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * REVAA_TTS_VERSION — version courante du plugin.
  * Utilisée comme cache-buster sur les assets CSS / JS.
  */
-define( 'REVAA_TTS_VERSION', '1.0.0' );
+define( 'REVAA_TTS_VERSION', '1.2.0' );
 
 /**
  * REVAA_TTS_DIR — chemin absolu vers le répertoire du plugin (avec slash final).
