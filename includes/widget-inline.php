@@ -124,20 +124,17 @@ function getText(){
   return titleText?titleText+'. '+bodyText:bodyText;
 }
 
-/* ── Liste des voix ── */
+/* ── Liste des voix (françaises uniquement) ── */
 function populateVoices(){
-  var voices=synth.getVoices();
+  var voices=synth.getVoices().filter(function(v){var l=(v.lang||'').toLowerCase();return l==='fr'||l.indexOf('fr-')===0||l.indexOf('fr_')===0;});
   selVoice.innerHTML='';
   if(!voices.length){
-    var o=document.createElement('option');o.textContent='Aucune voix disponible';o.disabled=true;
+    var o=document.createElement('option');o.textContent='Aucune voix française disponible';o.disabled=true;
     selVoice.appendChild(o);selVoice.disabled=true;return;
   }
   selVoice.disabled=false;
-  var fr=voices.filter(function(v){return v.lang.startsWith('fr');});
-  var other=voices.filter(function(v){return!v.lang.startsWith('fr');});
   function makeOpt(v){var o=document.createElement('option');o.value=v.name;o.textContent=v.name+' ('+v.lang+')';return o;}
-  if(fr.length){var g=document.createElement('optgroup');g.label='🇫🇷 Voix françaises';fr.forEach(function(v){g.appendChild(makeOpt(v));});selVoice.appendChild(g);}
-  if(other.length){var g2=document.createElement('optgroup');g2.label='🌐 Autres voix';other.forEach(function(v){g2.appendChild(makeOpt(v));});selVoice.appendChild(g2);}
+  voices.forEach(function(v){selVoice.appendChild(makeOpt(v));});
 }
 populateVoices();
 if(typeof synth.onvoiceschanged!=='undefined')synth.onvoiceschanged=populateVoices;
